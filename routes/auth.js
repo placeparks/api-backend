@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 
-const jwtt = process.env.JWT_TOKEN;
+const jwtt = 'Blessyou@123';
 
 
 //Create new user using: POST "/api/auth/". Doesn't require auth

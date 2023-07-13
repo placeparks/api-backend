@@ -6,8 +6,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-const jwtt = 'Blessyou@123';
 
+const jwtt = process.env.JWT_TOKEN;
+
+
+//Create new user using: POST "/api/auth/". Doesn't require auth
 router.post('/signup',[
     body('username').isLength({min:4}),
     body('email', 'enter a valid email').isEmail(),
@@ -38,7 +41,6 @@ if(user){
 //securing password
 const salt = await bcrypt.genSaltSync(10);
 const secPass= await bcrypt.hash(req.body.password,salt);
-
 
   //create a new user
   user = await User.create({
@@ -72,7 +74,7 @@ catch (error){
 })
 
 
-//api/auth/login
+//login a user using: POST "/api/auth/login".
 router.post('/login',[
   body('email', 'enter a valid email').isEmail(),
   body('password', 'password cannot be blank').exists(), ],
@@ -117,8 +119,53 @@ catch (error){
 
 
    
+//update user using: PUT "/api/auth/update". Requires auth
+router.put('/update', [
+  body('username').optional().isLength({min:6}),
+  body('firstName').optional(),
+  body('lastName').optional(),
+  body('vehicleRegNo').optional(),
+  body('contactNumber').optional(),
+  body('emergencyContactNumber').optional(),
+  body('gender').optional().isIn(['male', 'female', 'other']),
+  body('vehicleType').optional(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+  }
 
-    
+  // Extract user ID from JWT token
+  const token = req.headers['authorization'];
+  const decoded = jwt.verify(token, jwtt);
+  const userId = decoded.user.id;
+
+  try {
+      // Find the user in the database and update their data
+      const user = await User.findById(userId);
+      if (!user) {
+          return res.status(404).json({error: 'User not found'});
+      }
+
+      // Update fields if provided
+      if (req.body.username) user.username = req.body.username;
+      if (req.body.firstName) user.firstName = req.body.firstName;
+      if (req.body.lastName) user.lastName = req.body.lastName;
+      if (req.body.vehicleRegNo) user.vehicleRegNo = req.body.vehicleRegNo;
+      if (req.body.contactNumber) user.contactNumber = req.body.contactNumber;
+      if (req.body.emergencyContactNumber) user.emergencyContactNumber = req.body.emergencyContactNumber;
+      if (req.body.gender) user.gender = req.body.gender;
+      if (req.body.vehicleType) user.vehicleType = req.body.vehicleType;
+
+      // Save the updated user
+      await user.save();
+      res.json({success: true, user});
+
+  } catch (error) {
+      console.error (error.message);
+      res.status(500).send('Server error');
+  }
+});
 
 
 module.exports = router;

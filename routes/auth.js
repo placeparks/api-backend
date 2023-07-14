@@ -5,9 +5,19 @@ const User= require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 
 const jwtt = process.env.JWT_TOKEN;
+
+let transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USERNAME,  // your email
+    pass: process.env.EMAIL_PASSWORD   // your email password
+  }
+});
 
 
 //Create new user using: POST "/api/auth/". Doesn't require auth
@@ -32,12 +42,19 @@ router.post('/signup',[
 
     // Handle the case when there are no validation errors
   //we are checking whether the user already exists with the same email or not
-    try{
-let user = await User.findOne({email:req.body.email});
-if(user){
-  let success = false;
-    return res.status(400).json({error:"sorry enter another email"})
-}
+   
+  try {
+    let user = await User.findOne({ email: req.body.email });
+    if(user) {
+      success = false;
+      return res.status(400).json({ error: "Sorry, a user with this email already exists" });
+    }
+
+    user = await User.findOne({ username: req.body.username });
+    if(user) {
+      success = false;
+      return res.status(400).json({ error: "Sorry, a user with this username already exists" });
+    }
 //securing password
 const salt = await bcrypt.genSaltSync(10);
 const secPass= await bcrypt.hash(req.body.password,salt);
@@ -65,13 +82,14 @@ const data={
 
 const token = jwt.sign(data, jwtt);
 success = true;
-        res.json({success, token})}
-        
+res.json({success, token});
+}
 catch (error){
             console.error (error.message);
             res.status(500).send('invalid value, please try again');
         }
 })
+
 
 
 //login a user using: POST "/api/auth/login".
@@ -86,13 +104,14 @@ async (req, res)=> {
   }
 
 
-  const {email, password}= req.body;
-  try{
-let user = await User.findOne({email});
-if(!user){
-  let success = false;
-  return res.status(400).json({error:"sorry enter correct email"});
-}
+  const {email, password} = req.body;
+  try {
+    let user = await User.findOne({email});
+    if(!user) {
+      let success = false;
+      return res.status(400).json({error: "Sorry, please enter correct email"});
+    }
+
 //check password
 const passwordCompare = await bcrypt.compare(password, user.password);
 if (!passwordCompare) {
@@ -109,12 +128,16 @@ const data={
 
 const token = jwt.sign(data, jwtt);
 success = true;
-res.json({ success, token})}
-    
-catch (error){
-          console.error (error.message);
-          res.status(500).send('invalid value, please try again');
-      }
+let userResponse = user.toObject();
+delete userResponse.password;
+
+// Return the user object (without the password) in the response along with the success message and token
+res.json({ success, user: userResponse, token});
+}
+catch (error) {
+console.error (error.message);
+res.status(500).send('Invalid value, please try again');
+}
 })
 
 
@@ -164,6 +187,51 @@ router.put('/update', [
   } catch (error) {
       console.error (error.message);
       res.status(500).send('Server error');
+  }
+});
+
+
+
+//Forget password using: POST "/api/auth/forgetpassword".
+router.post('/forgotPassword', async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ error: 'User with this email does not exist' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiration = Date.now() + 3600000;  // Token valid for 1 hour
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = resetTokenExpiration;
+
+    await user.save();
+
+    const resetLink = `http://localhost:3000/resetPassword?token=${resetToken}`;
+
+    let mailOptions = {
+      from: process.env.EMAIL_USERNAME,
+      to: user.email,
+      subject: 'Password Reset Link',
+      text: `Please click the following link to reset your password: ${resetLink}`,
+    };
+
+    transporter.sendMail(mailOptions, function(error, info) {
+      if (error) {
+        console.log(error);
+      } else {
+        console.log('Email sent: ' + info.response);
+      }
+    });
+
+    res.json({ message: 'Password reset link has been sent to your email' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('An error occurred');
   }
 });
 

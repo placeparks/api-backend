@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
 
-const jwtt = process.env.JWT_TOKEN;
+const jwtt = 'Blessyou@123';
 
 let transporter = nodemailer.createTransport({
   service: 'gmail',
